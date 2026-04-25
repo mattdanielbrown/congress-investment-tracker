@@ -24,7 +24,7 @@ Database rows loaded from parsed results retain lineage through `source_document
 
 ## Source Handling
 
-House collection scrapes official House Clerk disclosure links and downloads matching PTR PDFs for the requested year when those links are exposed in the index page. Senate collection currently requires explicit official `efdsearch.senate.gov` document URLs because the Senate public search experience is not exposed as a stable unauthenticated JSON API in this MVP.
+House collection reads the official House Clerk yearly financial disclosure index, filters Periodic Transaction Report rows, and downloads the corresponding official PTR PDFs. It keeps the index row metadata with each raw source document. Senate collection currently requires explicit official `efdsearch.senate.gov` document URLs because the Senate public search experience is not exposed as a stable unauthenticated JSON API in this MVP.
 
 ## Parser Boundaries
 

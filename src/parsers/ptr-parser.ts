@@ -22,6 +22,8 @@ interface PtrParserOptions {
 
 const amountPattern = /\$[\d,]+(?:\.\d{1,2})?\s*(?:-|–|—|to)\s*\$?[\d,]+(?:\.\d{1,2})?|Over\s+\$[\d,]+(?:\.\d{1,2})?/iu;
 const transactionLinePattern = /^(?:(SP|DC|JT|Self|Member|Trust|TR|S|M)\s+)?(.+?)\s+(P|S|E|PS|Purchase|Sale|Exchange|Partial Sale)\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(.+)$/iu;
+const transactionAnchorPattern = /^(?:(SP|DC|JT|Self|Member|Trust|TR|S|M)\s+)?(.+?)\s+(P|S|E|PS|Purchase|Sale|Exchange|Partial Sale)\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(.+?)\s*$/iu;
+const moneyPattern = /\$[\d,]+(?:\.\d{1,2})?/gu;
 
 export function parseHousePtrText(options: PtrParserOptions): PtrParserResult {
 	return parsePtrText(options);
@@ -135,8 +137,8 @@ function parseTransactions(
 	const transactions: ParsedPtrTransaction[] = [];
 	const seenKeys = new Set<string>();
 
-	for (const line of lines) {
-		const parsed = parseTransactionLine(line, filingDate);
+	for (let index = 0; index < lines.length; index += 1) {
+		const parsed = parseTransactionLine(lines, index, filingDate);
 
 		if (!parsed) {
 			continue;
@@ -163,39 +165,83 @@ function parseTransactions(
 }
 
 function parseTransactionLine(
-	line: string,
+	lines: string[],
+	index: number,
 	filingDate: string | undefined
 ): ParsedPtrTransaction | undefined {
-	const amountMatch = line.match(amountPattern);
+	const line = lines[index];
 
-	if (!amountMatch?.[0]) {
+	if (!line) {
 		return undefined;
 	}
+
+	const amountMatch = line.match(amountPattern);
 
 	const structuredMatch = line.match(transactionLinePattern);
 
-	if (!structuredMatch?.[2] || !structuredMatch[3]) {
+	if (amountMatch?.[0] && structuredMatch?.[2] && structuredMatch[3]) {
+		return createParsedTransaction({
+			ownerLabel: structuredMatch[1],
+			assetName: buildWrappedAssetName(structuredMatch[2], lines.slice(index + 1)),
+			transactionTypeLabel: structuredMatch[3],
+			transactionDateLabel: structuredMatch[4],
+			notificationDateLabel: structuredMatch[5],
+			amountLabel: amountMatch[0],
+			filingDate
+		});
+	}
+
+	const anchoredMatch = line.match(transactionAnchorPattern);
+
+	if (!anchoredMatch?.[2] || !anchoredMatch[3] || !anchoredMatch[4] || !anchoredMatch[5]) {
 		return undefined;
 	}
 
-	const ownerLabel = structuredMatch[1];
-	const assetName = normalizeWhitespace(structuredMatch[2]);
-	const transactionTypeLabel = normalizeWhitespace(structuredMatch[3]);
-	const transactionDate = parseDisclosureDate(structuredMatch[4]);
-	const notificationDate = parseDisclosureDate(structuredMatch[5]);
-	const reportedValue = parseReportedValueRange(amountMatch[0]);
+	const amountLabel = buildWrappedAmountLabel(anchoredMatch[6] ?? "", lines.slice(index + 1));
+
+	if (!amountLabel) {
+		return undefined;
+	}
+
+	const assetName = buildWrappedAssetName(anchoredMatch[2], lines.slice(index + 1));
+
+	return createParsedTransaction({
+		ownerLabel: anchoredMatch[1],
+		assetName,
+		transactionTypeLabel: anchoredMatch[3],
+		transactionDateLabel: anchoredMatch[4],
+		notificationDateLabel: anchoredMatch[5],
+		amountLabel,
+		filingDate
+	});
+}
+
+function createParsedTransaction(input: {
+	ownerLabel: string | undefined;
+	assetName: string;
+	transactionTypeLabel: string;
+	transactionDateLabel: string | undefined;
+	notificationDateLabel: string | undefined;
+	amountLabel: string;
+	filingDate: string | undefined;
+}): ParsedPtrTransaction {
+	const assetName = normalizeWhitespace(input.assetName);
+	const transactionTypeLabel = normalizeWhitespace(input.transactionTypeLabel);
+	const transactionDate = parseDisclosureDate(input.transactionDateLabel);
+	const notificationDate = parseDisclosureDate(input.notificationDateLabel);
+	const reportedValue = parseReportedValueRange(input.amountLabel);
 	const estimatedValue = estimateReportedValue(reportedValue, "range_midpoint");
 
 	return {
-		reportedOwnerCategory: normalizeOwnerCategory(ownerLabel),
-		...(ownerLabel ? { reportedOwnerLabel: ownerLabel } : {}),
+		reportedOwnerCategory: normalizeOwnerCategory(input.ownerLabel),
+		...(input.ownerLabel ? { reportedOwnerLabel: input.ownerLabel } : {}),
 		assetName,
 		normalizedAssetName: normalizeAssetName(assetName),
 		transactionType: normalizeTransactionType(transactionTypeLabel),
 		transactionTypeLabel,
 		...(transactionDate ? { transactionDate } : {}),
 		...(notificationDate ? { notificationDate } : {}),
-		...(filingDate ? { filingDate } : {}),
+		...(input.filingDate ? { filingDate: input.filingDate } : {}),
 		reportedValue,
 		...(estimatedValue !== undefined ? {
 			estimatedValue,
@@ -203,6 +249,76 @@ function parseTransactionLine(
 		} : {}),
 		confidence: transactionDate ? 0.9 : 0.75
 	};
+}
+
+function buildWrappedAmountLabel(firstValueFragment: string, followingLines: string[]): string | undefined {
+	const firstValue = normalizeWhitespace(firstValueFragment);
+	const completeAmount = firstValue.match(amountPattern)?.[0];
+
+	if (completeAmount) {
+		return normalizeWhitespace(completeAmount);
+	}
+
+	const firstMoney = firstValue.match(/\$[\d,]+(?:\.\d{1,2})?\s*(?:-|–|—|to)?/u)?.[0];
+
+	if (!firstMoney) {
+		return undefined;
+	}
+
+	if (!/(?:-|–|—|to)\s*$/iu.test(firstMoney)) {
+		return normalizeWhitespace(firstMoney);
+	}
+
+	for (const line of followingLines) {
+		if (isTransactionContinuationBoundary(line)) {
+			break;
+		}
+
+		const moneyMatches = [...line.matchAll(moneyPattern)];
+		const lastMoney = moneyMatches.at(-1)?.[0];
+
+		if (lastMoney) {
+			return normalizeWhitespace(`${firstMoney} ${lastMoney}`);
+		}
+	}
+
+	return normalizeWhitespace(firstMoney);
+}
+
+function buildWrappedAssetName(firstAssetFragment: string, followingLines: string[]): string {
+	const assetParts = [firstAssetFragment];
+
+	for (const line of followingLines) {
+		if (isTransactionContinuationBoundary(line)) {
+			break;
+		}
+
+		const assetContinuation = cleanAssetContinuation(line);
+
+		if (assetContinuation) {
+			assetParts.push(assetContinuation);
+		}
+	}
+
+	return normalizeWhitespace(assetParts.join(" "));
+}
+
+function cleanAssetContinuation(line: string): string | undefined {
+	const beforeAmount = line.split(/\$[\d,]+/u)[0] ?? "";
+	const cleaned = normalizeWhitespace(beforeAmount)
+		.replace(/\s*\[[A-Z]{2,}\]\s*$/u, "")
+		.trim();
+
+	if (!cleaned || /^\[[A-Z]{2,}\]$/u.test(cleaned)) {
+		return undefined;
+	}
+
+	return cleaned;
+}
+
+function isTransactionContinuationBoundary(line: string): boolean {
+	return transactionAnchorPattern.test(line)
+		|| /^(F\s+S|S\s+O|L\s*:|I\s+P|C\s+S|I\s+V|Yes\b|No\b|Digitally Signed\b|\*)/iu.test(line);
 }
 
 function cleanMemberName(value: string): string {

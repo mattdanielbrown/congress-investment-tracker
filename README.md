@@ -42,7 +42,7 @@ Migrate the database and seed reference rows:
 npm run dev -- migrate
 ```
 
-Collect House PTR documents for a year:
+Collect House PTR documents for a year. This uses the official House yearly financial disclosure index to find PTR filings and download the linked PTR PDFs:
 
 ```sh
 npm run dev -- collect --source house --year 2025 --limit 10

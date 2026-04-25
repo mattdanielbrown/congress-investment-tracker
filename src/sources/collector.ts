@@ -21,6 +21,26 @@ export interface CollectResult {
 }
 
 const houseReportIndexUrl = "https://disclosures-clerk.house.gov/FinancialDisclosure/ViewReport";
+const houseFinancialDisclosureIndexPath = "/public_disc/financial-pdfs";
+const housePtrPdfPath = "/public_disc/ptr-pdfs";
+
+interface DownloadTarget {
+	url: string;
+	sourcePublishedAt?: string;
+	rawMetadata?: Record<string, unknown>;
+}
+
+interface HouseIndexRow {
+	prefix: string;
+	last: string;
+	first: string;
+	suffix: string;
+	filingType: string;
+	stateDistrict: string;
+	year: string;
+	filingDate: string;
+	documentId: string;
+}
 
 export async function collectPtrDocuments(options: CollectOptions): Promise<CollectResult> {
 	if (options.source === "house") {
@@ -31,15 +51,17 @@ export async function collectPtrDocuments(options: CollectOptions): Promise<Coll
 }
 
 async function collectHousePtrDocuments(options: CollectOptions): Promise<CollectResult> {
-	const urls = options.urls?.length ? options.urls : await discoverHousePdfUrls(options.year);
+	const targets = options.urls?.length
+		? options.urls.map((url) => ({ url }))
+		: await discoverHousePdfTargets(options.year);
 	const result = await downloadDocuments({
 		...options,
-		urls: limitValues(urls, options.limit)
+		targets: limitValues(targets, options.limit)
 	});
 
-	if (urls.length === 0 && !options.urls?.length) {
+	if (targets.length === 0 && !options.urls?.length) {
 		result.warnings.push(
-			`No House PTR PDF links were discovered for ${options.year}; pass official document URLs with --url if the index layout has changed.`
+			`No House PTR PDF links were discovered for ${options.year}; pass official document URLs with --url if the official index layout has changed.`
 		);
 	}
 
@@ -60,11 +82,55 @@ async function collectSenatePtrDocuments(options: CollectOptions): Promise<Colle
 
 	return downloadDocuments({
 		...options,
-		urls: limitValues(options.urls, options.limit)
+		targets: limitValues(options.urls.map((url) => ({ url })), options.limit)
 	});
 }
 
-async function discoverHousePdfUrls(year: number): Promise<string[]> {
+async function discoverHousePdfTargets(year: number): Promise<DownloadTarget[]> {
+	const indexTargets = await discoverHousePdfTargetsFromYearIndex(year);
+
+	if (indexTargets.length > 0) {
+		return indexTargets;
+	}
+
+	return discoverHousePdfTargetsFromReportPage(year);
+}
+
+async function discoverHousePdfTargetsFromYearIndex(year: number): Promise<DownloadTarget[]> {
+	const indexUrl = new URL(`${houseFinancialDisclosureIndexPath}/${year}FD.txt`, dataSourceDefinitions.house.baseUrl);
+	const response = await fetch(indexUrl);
+
+	if (!response.ok) {
+		return [];
+	}
+
+	const rows = parseHouseIndexRows(await response.text());
+
+	return rows
+		.filter((row) => row.filingType.toUpperCase() === "P" && row.year === String(year))
+		.map((row) => {
+			const url = new URL(`${housePtrPdfPath}/${year}/${row.documentId}.pdf`, dataSourceDefinitions.house.baseUrl);
+			const sourcePublishedAt = parseHouseIndexDate(row.filingDate);
+			const rawMetadata: Record<string, unknown> = {
+				documentId: row.documentId,
+				filingType: row.filingType,
+				filerPrefix: row.prefix,
+				filerFirstName: row.first,
+				filerLastName: row.last,
+				filerSuffix: row.suffix,
+				stateDistrict: row.stateDistrict,
+				indexUrl: indexUrl.toString()
+			};
+
+			return {
+				url: url.toString(),
+				...(sourcePublishedAt ? { sourcePublishedAt } : {}),
+				rawMetadata
+			};
+		});
+}
+
+async function discoverHousePdfTargetsFromReportPage(year: number): Promise<DownloadTarget[]> {
 	const response = await fetch(houseReportIndexUrl);
 
 	if (!response.ok) {
@@ -83,42 +149,45 @@ async function discoverHousePdfUrls(year: number): Promise<string[]> {
 		}
 	}
 
-	return [...urls].sort();
+	return [...urls].sort().map((url) => ({ url }));
 }
 
 async function downloadDocuments(options: Required<Pick<CollectOptions, "source" | "year">> & {
-	urls: string[];
+	targets: DownloadTarget[];
 }): Promise<CollectResult> {
 	const warnings: string[] = [];
 	const documents: CollectedSourceDocument[] = [];
 
-	for (const url of options.urls) {
-		const response = await fetch(url);
+	for (const target of options.targets) {
+		const response = await fetch(target.url);
 
 		if (!response.ok) {
-			warnings.push(`Failed to download ${url}: ${response.status} ${response.statusText}`);
+			warnings.push(`Failed to download ${target.url}: ${response.status} ${response.statusText}`);
 			continue;
 		}
 
 		const bytes = Buffer.from(await response.arrayBuffer());
 		const hash = sha256(bytes);
 		const contentType = response.headers.get("content-type") ?? undefined;
-		const storagePath = await writeRawDocument(options.source, options.year, url, bytes, hash);
+		const storagePath = await writeRawDocument(options.source, options.year, target.url, bytes, hash);
+		const rawMetadata = {
+			...target.rawMetadata,
+			fileName: basename(new URL(target.url).pathname),
+			contentLength: bytes.byteLength
+		};
 
 		documents.push({
 			source: options.source,
 			chamber: options.source,
 			year: options.year,
-			url,
+			url: target.url,
 			documentType: "periodic_transaction_report",
 			...(contentType ? { contentType } : {}),
 			sha256: hash,
 			storagePath,
 			retrievedAt: new Date().toISOString(),
-			rawMetadata: {
-				fileName: basename(new URL(url).pathname),
-				contentLength: bytes.byteLength
-			}
+			...(target.sourcePublishedAt ? { sourcePublishedAt: target.sourcePublishedAt } : {}),
+			rawMetadata
 		});
 	}
 
@@ -153,4 +222,54 @@ function limitValues<T>(values: T[], limit: number | undefined): T[] {
 	}
 
 	return values.slice(0, limit);
+}
+
+function parseHouseIndexRows(text: string): HouseIndexRow[] {
+	const lines = text.split(/\r?\n/u).filter(Boolean);
+	const rows: HouseIndexRow[] = [];
+
+	for (const line of lines.slice(1)) {
+		const [
+			prefix = "",
+			last = "",
+			first = "",
+			suffix = "",
+			filingType = "",
+			stateDistrict = "",
+			year = "",
+			filingDate = "",
+			documentId = ""
+		] = line.split("\t");
+
+		if (!documentId) {
+			continue;
+		}
+
+		rows.push({
+			prefix,
+			last,
+			first,
+			suffix,
+			filingType,
+			stateDistrict,
+			year,
+			filingDate,
+			documentId
+		});
+	}
+
+	return rows;
+}
+
+function parseHouseIndexDate(value: string): string | undefined {
+	const match = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/u);
+
+	if (!match?.[1] || !match[2] || !match[3]) {
+		return undefined;
+	}
+
+	const month = match[1].padStart(2, "0");
+	const day = match[2].padStart(2, "0");
+
+	return `${match[3]}-${month}-${day}`;
 }
