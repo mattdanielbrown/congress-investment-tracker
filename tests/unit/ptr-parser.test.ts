@@ -209,6 +209,38 @@ describe("parseHousePtrText", () => {
 			}
 		});
 	});
+
+	it("skips collapsed House cap gains headers inside wrapped rows", () => {
+		const result = parseHousePtrText({
+			sourceDocument: createDocument("house"),
+			text: `
+				Filing ID #20029070
+				Name: Hon. Suzan K. DelBene
+				Status: Member
+				State/District: WA01
+
+				JT New Jersey ST Transn TR FD Auth S (partial) 03/19/2025 03/19/2025 $250,001 -
+				Cap. Gains > $200?
+				SYS BDS 5.00% Due Jun 15, 2035 $500,000
+				[GS]
+				F S : New
+
+				Digitally Signed: Hon. Suzan K. DelBene , 04/10/2025
+			`
+		});
+
+		expect(result.status).toBe("parsed");
+		expect(result.transactions).toHaveLength(1);
+		expect(result.transactions[0]).toMatchObject({
+			reportedOwnerCategory: "joint",
+			normalizedAssetName: "New Jersey ST Transn TR FD Auth SYS BDS 5.00% Due Jun 15, 2035",
+			transactionType: "partial_sale",
+			reportedValue: {
+				min: 250001,
+				max: 500000
+			}
+		});
+	});
 });
 
 describe("parseSenatePtrText", () => {

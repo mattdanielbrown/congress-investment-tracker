@@ -362,6 +362,7 @@ function isTransactionContinuationBoundary(line: string): boolean {
 function isHouseTableHeaderFragment(line: string): boolean {
 	return /^ID\s+Owner\s+Asset\b/iu.test(line)
 		|| /^Type\s+Date\b/iu.test(line)
+		|| /^Cap\.\s+Gains\s*>\s*\$200\??$/iu.test(line)
 		|| /^Gains\s*>/iu.test(line)
 		|| /^\$200\??$/u.test(line)
 		|| /^Cap\.$/iu.test(line);
