@@ -22,50 +22,61 @@ export interface Logger {
 	error(message: string, context?: LogContext): void;
 }
 
-function shouldLog(level: LogLevel): boolean {
-	return levelRank[level] >= levelRank[env.LOG_LEVEL];
+export interface LoggerOptions {
+	getLogLevel?: () => LogLevel;
+	now?: () => Date;
+	stdout?: (message: string) => void;
+	stderr?: (message: string) => void;
 }
 
-function writeLog(level: LogLevel, message: string, context: LogContext = {}): void {
-	if (!shouldLog(level)) {
-		return;
+function shouldLog(level: LogLevel, configuredLevel: LogLevel): boolean {
+	return levelRank[level] >= levelRank[configuredLevel];
+}
+
+export function createLogger(options: LoggerOptions = {}): Logger {
+	const getLogLevel = options.getLogLevel ?? (() => env.LOG_LEVEL);
+	const now = options.now ?? (() => new Date());
+	const stdout = options.stdout ?? ((message: string) => console.log(message));
+	const stderr = options.stderr ?? ((message: string) => console.error(message));
+
+	function writeLog(level: LogLevel, message: string, context: LogContext = {}): void {
+		if (!shouldLog(level, getLogLevel())) {
+			return;
+		}
+
+		const record = {
+			level,
+			message,
+			timestamp: now().toISOString(),
+			...context
+		};
+		const serialized = JSON.stringify(record);
+
+		if (level === "error" || level === "warn") {
+			stderr(serialized);
+			return;
+		}
+
+		stdout(serialized);
 	}
 
-	const record = {
-		level,
-		message,
-		timestamp: new Date().toISOString(),
-		...context
+	return {
+		debug(message, context) {
+			writeLog("debug", message, context);
+		},
+		info(message, context) {
+			writeLog("info", message, context);
+		},
+		warn(message, context) {
+			writeLog("warn", message, context);
+		},
+		error(message, context) {
+			writeLog("error", message, context);
+		}
 	};
-	const serialized = JSON.stringify(record);
-
-	if (level === "error") {
-		console.error(serialized);
-		return;
-	}
-
-	if (level === "warn") {
-		console.warn(serialized);
-		return;
-	}
-
-	console.log(serialized);
 }
 
-export const logger: Logger = {
-	debug(message, context) {
-		writeLog("debug", message, context);
-	},
-	info(message, context) {
-		writeLog("info", message, context);
-	},
-	warn(message, context) {
-		writeLog("warn", message, context);
-	},
-	error(message, context) {
-		writeLog("error", message, context);
-	}
-};
+export const logger: Logger = createLogger();
 
 export function errorToLogContext(error: unknown): Record<string, unknown> {
 	if (error instanceof Error) {
