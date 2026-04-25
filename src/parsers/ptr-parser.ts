@@ -21,8 +21,8 @@ interface PtrParserOptions {
 }
 
 const amountPattern = /\$[\d,]+(?:\.\d{1,2})?\s*(?:-|–|—|to)\s*\$?[\d,]+(?:\.\d{1,2})?|Over\s+\$[\d,]+(?:\.\d{1,2})?/iu;
-const transactionLinePattern = /^(?:(SP|DC|JT|Self|Member|Trust|TR|S|M)\s+)?(.+?)\s+(P|S|E|PS|Purchase|Sale|Exchange|Partial Sale)\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(.+)$/iu;
-const transactionAnchorPattern = /^(?:(SP|DC|JT|Self|Member|Trust|TR|S|M)\s+)?(.+?)\s+(P|S|E|PS|Purchase|Sale|Exchange|Partial Sale)\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(.+?)\s*$/iu;
+const transactionLinePattern = /^(?:(SP|DC|JT|Self|Member|Trust|TR|S|M)\s+)?(.+?)\s+(S\s*\(partial\)|Sale\s*\(partial\)|Partial Sale|Purchase|Sale|Exchange|PS|P|S|E)\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(.+)$/iu;
+const transactionAnchorPattern = /^(?:(SP|DC|JT|Self|Member|Trust|TR|S|M)\s+)?(.+?)\s+(S\s*\(partial\)|Sale\s*\(partial\)|Partial Sale|Purchase|Sale|Exchange|PS|P|S|E)\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\s+(.+?)\s*$/iu;
 const moneyPattern = /\$[\d,]+(?:\.\d{1,2})?/gu;
 
 export function parseHousePtrText(options: PtrParserOptions): PtrParserResult {
@@ -41,7 +41,7 @@ function parsePtrText(options: PtrParserOptions): PtrParserResult {
 	const warnings: string[] = [];
 	const member = parseMember(lines, options.sourceDocument.chamber);
 	const filingDate = parseFilingDate(lines);
-	const transactions = parseTransactions(lines, filingDate, warnings);
+	const transactions = parseTransactions(lines, filingDate);
 	const isAmendment = /\bamend(?:ment|ed)?\b/iu.test(options.text);
 
 	if (!member) {
@@ -131,11 +131,9 @@ function parseFilingDate(lines: string[]): string | undefined {
 
 function parseTransactions(
 	lines: string[],
-	filingDate: string | undefined,
-	warnings: string[]
+	filingDate: string | undefined
 ): ParsedPtrTransaction[] {
 	const transactions: ParsedPtrTransaction[] = [];
-	const seenKeys = new Set<string>();
 
 	for (let index = 0; index < lines.length; index += 1) {
 		const parsed = parseTransactionLine(lines, index, filingDate);
@@ -144,20 +142,6 @@ function parseTransactions(
 			continue;
 		}
 
-		const key = [
-			parsed.reportedOwnerCategory,
-			parsed.normalizedAssetName.toLowerCase(),
-			parsed.transactionType,
-			parsed.transactionDate ?? "",
-			parsed.reportedValue.label ?? ""
-		].join("|");
-
-		if (seenKeys.has(key)) {
-			warnings.push(`Duplicate transaction row skipped: ${parsed.assetName}`);
-			continue;
-		}
-
-		seenKeys.add(key);
 		transactions.push(parsed);
 	}
 

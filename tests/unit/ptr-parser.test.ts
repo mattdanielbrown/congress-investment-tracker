@@ -59,7 +59,7 @@ describe("parseHousePtrText", () => {
 		expect(result.warnings).toContain("No PTR transactions were parsed from document text.");
 	});
 
-	it("skips duplicate transaction rows and reports a warning", () => {
+	it("preserves repeated transaction rows from the source document", () => {
 		const text = `
 			NAME: Hon. Duplicate Member
 			State/District: NY12
@@ -71,9 +71,9 @@ describe("parseHousePtrText", () => {
 			text
 		});
 
-		expect(result.status).toBe("partially_parsed");
-		expect(result.transactions).toHaveLength(1);
-		expect(result.warnings[0]).toContain("Duplicate transaction row skipped");
+		expect(result.status).toBe("parsed");
+		expect(result.transactions).toHaveLength(2);
+		expect(result.warnings).toHaveLength(0);
 	});
 
 	it("parses House PDF rows with wrapped asset and amount columns", () => {
@@ -113,6 +113,40 @@ describe("parseHousePtrText", () => {
 			reportedValue: {
 				min: 100001,
 				max: 250000
+			}
+		});
+	});
+
+	it("parses House partial sale rows labeled S partial", () => {
+		const result = parseHousePtrText({
+			sourceDocument: createDocument("house"),
+			text: `
+				Filing ID #20030397
+				Name: Hon. Jake Auchincloss
+				Status: Member
+				State/District: MA04
+
+				SP State Street Corporation Common S (partial) 05/16/2025 05/20/2025 $15,001 -
+				Stock (STT) [ST] $50,000
+				F S : New
+				D : RSU distribution
+
+				Digitally Signed: Hon. Jake Auchincloss , 05/22/2025
+			`
+		});
+
+		expect(result.status).toBe("parsed");
+		expect(result.transactions).toHaveLength(1);
+		expect(result.transactions[0]).toMatchObject({
+			reportedOwnerCategory: "spouse",
+			normalizedAssetName: "State Street Corporation Common Stock (STT)",
+			transactionType: "partial_sale",
+			transactionTypeLabel: "S (partial)",
+			transactionDate: "2025-05-16",
+			notificationDate: "2025-05-20",
+			reportedValue: {
+				min: 15001,
+				max: 50000
 			}
 		});
 	});

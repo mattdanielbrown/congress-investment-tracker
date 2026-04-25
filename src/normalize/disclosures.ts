@@ -54,16 +54,19 @@ export function normalizeTransactionType(label: string | null | undefined): Tran
 		return "purchase";
 	}
 
-	if (["s", "sale", "sell", "sold"].includes(normalized)) {
-		return "sale";
-	}
-
 	if (["e", "exchange"].includes(normalized)) {
 		return "exchange";
 	}
 
-	if (["ps", "partial sale", "partial_sale"].includes(normalized)) {
+	if (
+		["ps", "partial sale", "partial_sale", "s (partial)", "sale (partial)"].includes(normalized)
+		|| /^s\s*\(\s*partial\s*\)$/u.test(normalized)
+	) {
 		return "partial_sale";
+	}
+
+	if (["s", "sale", "sell", "sold"].includes(normalized)) {
+		return "sale";
 	}
 
 	return "other";
