@@ -12,6 +12,7 @@ import type {
 	ParsedPtrTransaction,
 	PtrParserResult
 } from "../types/pipeline.js";
+import type { OwnerCategory } from "../types/transaction.js";
 
 export const ptrParserVersion = "ptr-text-parser-v1";
 
@@ -34,6 +35,7 @@ export function parseSenatePtrText(options: PtrParserOptions): PtrParserResult {
 }
 
 function parsePtrText(options: PtrParserOptions): PtrParserResult {
+	const hasExtractedText = normalizeWhitespace(options.text).length > 0;
 	const lines = options.text
 		.split(/\r?\n/u)
 		.map(normalizeWhitespace)
@@ -48,11 +50,17 @@ function parsePtrText(options: PtrParserOptions): PtrParserResult {
 		warnings.push("Unable to parse member identity from document text.");
 	}
 
+	if (!hasExtractedText) {
+		warnings.push("Extracted document text is empty; source document needs manual review.");
+	}
+
 	if (transactions.length === 0) {
 		warnings.push("No PTR transactions were parsed from document text.");
 	}
 
-	const status = transactions.length === 0
+	const status = !hasExtractedText
+		? "needs_review"
+		: transactions.length === 0
 		? "failed"
 		: warnings.length > 0
 			? "partially_parsed"
@@ -263,7 +271,7 @@ function createParsedTransaction(input: {
 	const estimatedValue = estimateReportedValue(reportedValue, "range_midpoint");
 
 	return {
-		reportedOwnerCategory: normalizeOwnerCategory(input.ownerLabel),
+		reportedOwnerCategory: normalizeParsedOwnerCategory(input.ownerLabel),
 		...(input.ownerLabel ? { reportedOwnerLabel: input.ownerLabel } : {}),
 		assetName,
 		normalizedAssetName: normalizeAssetName(assetName),
@@ -279,6 +287,14 @@ function createParsedTransaction(input: {
 		} : {}),
 		confidence: transactionDate ? 0.9 : 0.75
 	};
+}
+
+function normalizeParsedOwnerCategory(label: string | undefined): OwnerCategory {
+	if (!normalizeWhitespace(label ?? "")) {
+		return "member";
+	}
+
+	return normalizeOwnerCategory(label);
 }
 
 function buildWrappedAmountLabel(firstValueFragment: string, followingLines: string[]): string | undefined {

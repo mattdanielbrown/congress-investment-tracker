@@ -2,12 +2,21 @@ import { env } from "./config/env.js";
 import { migrateAndSeed, seedReferenceData, withDatabaseClient } from "./db/client.js";
 import { loadParsedPtrBatch } from "./db/load-ptr.js";
 import { parseCliArguments, requireSourceAndYear } from "./cli/arguments.js";
+import { auditParsedPtrBatch } from "./pipeline/audit.js";
 import { collectAndWriteManifest, parseManifestDocuments, readParsedPtrBatch } from "./pipeline/parse.js";
 import { todayIsoDate } from "./utils/date.js";
 import { errorToLogContext, logger } from "./utils/logger.js";
 
 async function main(): Promise<void> {
 	const options = parseCliArguments(process.argv.slice(2));
+
+	if (options.command === "audit-parse") {
+		const { source, year } = requireSourceAndYear(options);
+		const summary = await auditParsedPtrBatch({ source, year });
+
+		console.log(JSON.stringify(summary));
+		return;
+	}
 
 	logger.info("Congress stock disclosure tracker command started.", {
 		module: "index",

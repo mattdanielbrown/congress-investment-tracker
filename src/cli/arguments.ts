@@ -1,6 +1,13 @@
 import type { DisclosureSource } from "../types/pipeline.js";
 
-export type CliCommand = "collect" | "parse" | "load" | "run-pipeline" | "migrate" | "seed";
+export type CliCommand =
+	| "collect"
+	| "parse"
+	| "load"
+	| "run-pipeline"
+	| "migrate"
+	| "seed"
+	| "audit-parse";
 
 export interface CliOptions {
 	command: CliCommand;
@@ -10,7 +17,15 @@ export interface CliOptions {
 	limit?: number;
 }
 
-const commands = new Set<CliCommand>(["collect", "parse", "load", "run-pipeline", "migrate", "seed"]);
+const commands = new Set<CliCommand>([
+	"collect",
+	"parse",
+	"load",
+	"run-pipeline",
+	"migrate",
+	"seed",
+	"audit-parse"
+]);
 const sources = new Set<DisclosureSource>(["house", "senate"]);
 
 export function parseCliArguments(argv: string[]): CliOptions {

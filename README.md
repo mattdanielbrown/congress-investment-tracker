@@ -66,6 +66,12 @@ Load parsed documents into Postgres:
 npm run dev -- load --source house --year 2025
 ```
 
+Audit parsed document quality:
+
+```sh
+npm run dev -- audit-parse --source house --year 2025
+```
+
 Run collect, parse, migrate/seed, and load together:
 
 ```sh

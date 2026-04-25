@@ -385,6 +385,7 @@ async function ensureTransaction(
 			source_transaction_index,
 			transaction_type,
 			transaction_date,
+			notification_date,
 			filing_date,
 			reported_value_min,
 			reported_value_max,
@@ -395,7 +396,7 @@ async function ensureTransaction(
 			confidence,
 			notes
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
 		[
 			disclosureReportId,
 			memberId,
@@ -404,6 +405,7 @@ async function ensureTransaction(
 			sourceTransactionIndex,
 			transaction.transactionType,
 			transaction.transactionDate,
+			transaction.notificationDate,
 			transaction.filingDate,
 			transaction.reportedValue.min,
 			transaction.reportedValue.max,

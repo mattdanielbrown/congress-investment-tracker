@@ -47,6 +47,7 @@ describeIfDatabase("database PTR loading", () => {
 							transactionType: "purchase",
 							transactionTypeLabel: "P",
 							transactionDate: "2025-06-02",
+							notificationDate: "2025-08-11",
 							filingDate: "2025-08-12",
 							reportedValue: {
 								label: "$1,001 - $15,000",
@@ -96,16 +97,25 @@ describeIfDatabase("database PTR loading", () => {
 			expect(first.transactions).toBe(2);
 			expect(second.transactions).toBe(0);
 
-			const lineage = await client.query<{ source_document_id: string }>(
-				`SELECT source_document_id
+			const lineage = await client.query<{
+				source_document_id: string;
+				notification_date: string;
+			}>(
+				`SELECT
+						disclosure_reports.source_document_id,
+						transactions.notification_date::text
 					FROM disclosure_reports
-					WHERE filing_date = $1
-					ORDER BY id DESC
+					INNER JOIN transactions
+						ON transactions.disclosure_report_id = disclosure_reports.id
+					WHERE disclosure_reports.filing_date = $1
+						AND transactions.source_transaction_index = 0
+					ORDER BY disclosure_reports.id DESC
 					LIMIT 1`,
 				["2025-08-12"]
 			);
 
 			expect(lineage.rows[0]?.source_document_id).toBeTruthy();
+			expect(lineage.rows[0]?.notification_date).toBe("2025-08-11");
 		});
 	});
 });

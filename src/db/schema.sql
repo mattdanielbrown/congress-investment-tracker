@@ -204,6 +204,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 	reported_owner_category TEXT,
 	transaction_type TEXT NOT NULL,
 	transaction_date DATE,
+	notification_date DATE,
 	filing_date DATE,
 	reported_value_min NUMERIC(18,2),
 	reported_value_max NUMERIC(18,2),
@@ -239,6 +240,9 @@ CREATE INDEX IF NOT EXISTS idx_transactions_report
 
 ALTER TABLE transactions
 	ADD COLUMN IF NOT EXISTS source_transaction_index INTEGER;
+
+ALTER TABLE transactions
+	ADD COLUMN IF NOT EXISTS notification_date DATE;
 
 CREATE INDEX IF NOT EXISTS idx_transactions_report_source_index
 	ON transactions (disclosure_report_id, source_transaction_index);

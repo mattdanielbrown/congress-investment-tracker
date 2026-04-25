@@ -62,7 +62,7 @@ describe("parseHousePtrText", () => {
 		expect(result.warnings).toContain("No PTR transactions were parsed from document text.");
 	});
 
-	it("falls back to House index metadata when PDF text has no member identity", () => {
+	it("falls back to House index metadata and marks empty extracted text for review", () => {
 		const result = parseHousePtrText({
 			sourceDocument: createDocument("house", {
 				filerFirstName: "Gus M.",
@@ -72,7 +72,7 @@ describe("parseHousePtrText", () => {
 			text: "\f\f"
 		});
 
-		expect(result.status).toBe("failed");
+		expect(result.status).toBe("needs_review");
 		expect(result.member).toMatchObject({
 			fullName: "Gus M. Bilirakis",
 			chamber: "house",
@@ -80,7 +80,50 @@ describe("parseHousePtrText", () => {
 			district: "12"
 		});
 		expect(result.warnings).not.toContain("Unable to parse member identity from document text.");
+		expect(result.warnings).toContain("Extracted document text is empty; source document needs manual review.");
 		expect(result.warnings).toContain("No PTR transactions were parsed from document text.");
+	});
+
+	it("defaults omitted owner labels to the member", () => {
+		const result = parseHousePtrText({
+			sourceDocument: createDocument("house"),
+			text: `
+				NAME: Hon. Example Member
+				State/District: CA17
+				Apple Inc. (AAPL) P 06/02/2025 08/11/2025 $1,001 - $15,000
+			`
+		});
+
+		expect(result.status).toBe("parsed");
+		expect(result.transactions[0]).toMatchObject({
+			reportedOwnerCategory: "member",
+			assetName: "Apple Inc. (AAPL)"
+		});
+		expect(result.transactions[0]?.reportedOwnerLabel).toBeUndefined();
+	});
+
+	it("continues to preserve explicit owner labels", () => {
+		const result = parseHousePtrText({
+			sourceDocument: createDocument("house"),
+			text: `
+				NAME: Hon. Example Member
+				State/District: CA17
+				SP Apple Inc. (AAPL) P 06/02/2025 08/11/2025 $1,001 - $15,000
+				DC Tesla, Inc. - Common Stock S 06/26/2025 08/11/2025 $15,001-$50,000
+				JT Microsoft Corporation P 07/01/2025 08/11/2025 $1,001 - $15,000
+			`
+		});
+
+		expect(result.transactions.map((transaction) => transaction.reportedOwnerCategory)).toEqual([
+			"spouse",
+			"dependent_child",
+			"joint"
+		]);
+		expect(result.transactions.map((transaction) => transaction.reportedOwnerLabel)).toEqual([
+			"SP",
+			"DC",
+			"JT"
+		]);
 	});
 
 	it("preserves repeated transaction rows from the source document", () => {
