@@ -1,7 +1,13 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { parseHousePtrText, parseSenatePtrText } from "../../src/parsers/ptr-parser.js";
 import type { CollectedSourceDocument } from "../../src/types/pipeline.js";
+
+function readPtrFixture(name: string): string {
+	return readFileSync(new URL(`../fixtures/ptr/${name}`, import.meta.url), "utf8");
+}
 
 function createDocument(
 	source: "house" | "senate",
@@ -222,22 +228,7 @@ describe("parseHousePtrText", () => {
 	it("skips repeated House table headers inside page-broken wrapped rows", () => {
 		const result = parseHousePtrText({
 			sourceDocument: createDocument("house"),
-			text: `
-				Filing ID #20029070
-				Name: Hon. Suzan K. DelBene
-				Status: Member
-				State/District: WA01
-
-				JT New Jersey ST Transn TR FD Auth S (partial) 03/19/2025 03/19/2025 $250,001 -
-				ID Owner Asset Transaction Date Notification Amount Cap.
-				Type Date Gains >
-				$200?
-				SYS BDS 5.00% Due Jun 15, 2035 $500,000
-				[GS]
-				F S : New
-
-				Digitally Signed: Hon. Suzan K. DelBene , 04/10/2025
-			`
+			text: readPtrFixture("house-page-break-header.txt")
 		});
 
 		expect(result.status).toBe("parsed");
@@ -290,13 +281,7 @@ describe("parseSenatePtrText", () => {
 	it("parses Senate-style filer text with an amended report marker", () => {
 		const result = parseSenatePtrText({
 			sourceDocument: createDocument("senate"),
-			text: `
-				Filer Name: Sample Senator
-				State: IL
-				Amendment
-				S Microsoft Corporation P 01/05/2025 01/15/2025 Over $50,000,000
-				Date Filed: 01/20/2025
-			`
+			text: readPtrFixture("senate-amendment-over-range.txt")
 		});
 
 		expect(result.isAmendment).toBe(true);
@@ -313,5 +298,22 @@ describe("parseSenatePtrText", () => {
 				certainty: "reported_range"
 			}
 		});
+	});
+
+	it("marks Senate fixture text without transactions for review through audit warnings", () => {
+		const result = parseSenatePtrText({
+			sourceDocument: createDocument("senate"),
+			text: readPtrFixture("senate-empty-review.txt")
+		});
+
+		expect(result.status).toBe("failed");
+		expect(result.member).toMatchObject({
+			fullName: "Review Senator",
+			chamber: "senate",
+			state: "NY"
+		});
+		expect(result.filingDate).toBe("2025-02-01");
+		expect(result.transactions).toHaveLength(0);
+		expect(result.warnings).toEqual(["No PTR transactions were parsed from document text."]);
 	});
 });

@@ -33,11 +33,19 @@ CREATE TABLE IF NOT EXISTS source_documents (
 CREATE INDEX IF NOT EXISTS idx_source_documents_sha256
 	ON source_documents (sha256);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_documents_unique_sha256
+	ON source_documents (sha256)
+	WHERE sha256 IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_source_documents_data_source_retrieved
 	ON source_documents (data_source_id, retrieved_at);
 
 CREATE INDEX IF NOT EXISTS idx_source_documents_url
 	ON source_documents (url);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_documents_unique_url
+	ON source_documents (url)
+	WHERE url IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS members (
 	id BIGSERIAL PRIMARY KEY,
@@ -165,6 +173,10 @@ CREATE INDEX IF NOT EXISTS idx_assets_reported_name
 CREATE INDEX IF NOT EXISTS idx_assets_normalized_name
 	ON assets (normalized_name);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_unique_normalized_name
+	ON assets (normalized_name)
+	WHERE normalized_name IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_assets_company
 	ON assets (company_id);
 
@@ -189,6 +201,9 @@ CREATE INDEX IF NOT EXISTS idx_disclosure_reports_member_filing
 	ON disclosure_reports (member_id, filing_date);
 
 CREATE INDEX IF NOT EXISTS idx_disclosure_reports_source_document
+	ON disclosure_reports (source_document_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_disclosure_reports_unique_source_document
 	ON disclosure_reports (source_document_id);
 
 CREATE INDEX IF NOT EXISTS idx_disclosure_reports_report_type
@@ -246,6 +261,10 @@ ALTER TABLE transactions
 
 CREATE INDEX IF NOT EXISTS idx_transactions_report_source_index
 	ON transactions (disclosure_report_id, source_transaction_index);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_unique_report_source_index
+	ON transactions (disclosure_report_id, source_transaction_index)
+	WHERE source_transaction_index IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS holdings (
 	id BIGSERIAL PRIMARY KEY,

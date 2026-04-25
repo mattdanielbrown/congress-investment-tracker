@@ -160,6 +160,14 @@ async function ensureSourceDocument(
 			raw_metadata
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (sha256) WHERE sha256 IS NOT NULL DO UPDATE
+		SET url = COALESCE(source_documents.url, EXCLUDED.url),
+			content_type = COALESCE(EXCLUDED.content_type, source_documents.content_type),
+			storage_path = COALESCE(EXCLUDED.storage_path, source_documents.storage_path),
+			retrieved_at = EXCLUDED.retrieved_at,
+			source_published_at = COALESCE(EXCLUDED.source_published_at, source_documents.source_published_at),
+			parser_version = EXCLUDED.parser_version,
+			raw_metadata = EXCLUDED.raw_metadata
 		RETURNING id`,
 		[
 			dataSourceId,
@@ -286,6 +294,12 @@ async function ensureDisclosureReport(
 			extraction_confidence
 		)
 		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (source_document_id) DO UPDATE
+		SET member_id = COALESCE(disclosure_reports.member_id, EXCLUDED.member_id),
+			report_type = EXCLUDED.report_type,
+			filing_date = COALESCE(EXCLUDED.filing_date, disclosure_reports.filing_date),
+			status = EXCLUDED.status,
+			extraction_confidence = EXCLUDED.extraction_confidence
 		RETURNING id`,
 		[
 			memberId,
@@ -325,6 +339,10 @@ async function ensureAsset(
 			confidence
 		)
 		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (normalized_name) WHERE normalized_name IS NOT NULL DO UPDATE
+		SET reported_name = COALESCE(assets.reported_name, EXCLUDED.reported_name),
+			asset_type = COALESCE(assets.asset_type, EXCLUDED.asset_type),
+			confidence = COALESCE(GREATEST(assets.confidence, EXCLUDED.confidence), assets.confidence, EXCLUDED.confidence)
 		RETURNING id`,
 		[
 			transaction.assetName,
@@ -345,6 +363,19 @@ async function ensureTransaction(
 	transaction: ParsedPtrTransaction
 ): Promise<boolean> {
 	const sourceTransactionIndex = transaction.sourceTransactionIndex ?? null;
+
+	if (sourceTransactionIndex !== null) {
+		const inserted = await insertTransactionWithConflictGuard(client, {
+			disclosureReportId,
+			memberId,
+			assetId,
+			sourceTransactionIndex,
+			transaction
+		});
+
+		return inserted;
+	}
+
 	const existing = await client.query<{ id: string }>(
 		`SELECT id
 			FROM transactions
@@ -376,7 +407,26 @@ async function ensureTransaction(
 		return false;
 	}
 
-	await client.query(
+	return insertTransaction(client, {
+		disclosureReportId,
+		memberId,
+		assetId,
+		sourceTransactionIndex,
+		transaction
+	});
+}
+
+async function insertTransaction(
+	client: DatabaseClient,
+	input: {
+		disclosureReportId: number;
+		memberId: number | undefined;
+		assetId: number;
+		sourceTransactionIndex: number | null;
+		transaction: ParsedPtrTransaction;
+	}
+): Promise<boolean> {
+	const inserted = await client.query<{ id: string }>(
 		`INSERT INTO transactions (
 			disclosure_report_id,
 			member_id,
@@ -396,29 +446,97 @@ async function ensureTransaction(
 			confidence,
 			notes
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+		RETURNING id`,
 		[
-			disclosureReportId,
-			memberId,
-			assetId,
-			transaction.reportedOwnerCategory,
-			sourceTransactionIndex,
-			transaction.transactionType,
-			transaction.transactionDate,
-			transaction.notificationDate,
-			transaction.filingDate,
-			transaction.reportedValue.min,
-			transaction.reportedValue.max,
-			transaction.reportedValue.label,
-			transaction.estimatedValue,
-			transaction.estimationMethod,
-			transaction.reportedValue.currency,
-			transaction.confidence,
-			transaction.notes
+			input.disclosureReportId,
+			input.memberId,
+			input.assetId,
+			input.transaction.reportedOwnerCategory,
+			input.sourceTransactionIndex,
+			input.transaction.transactionType,
+			input.transaction.transactionDate,
+			input.transaction.notificationDate,
+			input.transaction.filingDate,
+			input.transaction.reportedValue.min,
+			input.transaction.reportedValue.max,
+			input.transaction.reportedValue.label,
+			input.transaction.estimatedValue,
+			input.transaction.estimationMethod,
+			input.transaction.reportedValue.currency,
+			input.transaction.confidence,
+			input.transaction.notes
 		]
 	);
 
-	return true;
+	if (inserted.rows[0]?.id) {
+		return true;
+	}
+
+	return false;
+}
+
+async function insertTransactionWithConflictGuard(
+	client: DatabaseClient,
+	input: {
+		disclosureReportId: number;
+		memberId: number | undefined;
+		assetId: number;
+		sourceTransactionIndex: number | null;
+		transaction: ParsedPtrTransaction;
+	}
+): Promise<boolean> {
+	const inserted = await client.query<{ id: string }>(
+		`INSERT INTO transactions (
+			disclosure_report_id,
+			member_id,
+			asset_id,
+			reported_owner_category,
+			source_transaction_index,
+			transaction_type,
+			transaction_date,
+			notification_date,
+			filing_date,
+			reported_value_min,
+			reported_value_max,
+			reported_value_label,
+			estimated_value,
+			estimation_method,
+			currency,
+			confidence,
+			notes
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+		ON CONFLICT (disclosure_report_id, source_transaction_index)
+			WHERE source_transaction_index IS NOT NULL
+			DO NOTHING
+		RETURNING id`,
+		[
+			input.disclosureReportId,
+			input.memberId,
+			input.assetId,
+			input.transaction.reportedOwnerCategory,
+			input.sourceTransactionIndex,
+			input.transaction.transactionType,
+			input.transaction.transactionDate,
+			input.transaction.notificationDate,
+			input.transaction.filingDate,
+			input.transaction.reportedValue.min,
+			input.transaction.reportedValue.max,
+			input.transaction.reportedValue.label,
+			input.transaction.estimatedValue,
+			input.transaction.estimationMethod,
+			input.transaction.reportedValue.currency,
+			input.transaction.confidence,
+			input.transaction.notes
+		]
+	);
+
+	if (inserted.rows[0]?.id) {
+		return true;
+	}
+
+	return false;
 }
 
 async function insertAuditLog(

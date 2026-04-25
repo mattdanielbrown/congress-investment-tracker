@@ -1,0 +1,5 @@
+Filer Name: Sample Senator
+State: IL
+Amendment
+S Microsoft Corporation P 01/05/2025 01/15/2025 Over $50,000,000
+Date Filed: 01/20/2025
