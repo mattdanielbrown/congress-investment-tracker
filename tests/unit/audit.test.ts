@@ -64,7 +64,9 @@ describe("summarizeParsedPtrBatch", () => {
 						sha256: "two",
 						storagePath: "/tmp/two.pdf",
 						retrievedAt: "2026-04-24T00:00:00.000Z",
-						rawMetadata: {}
+						rawMetadata: {
+							documentId: "two-document"
+						}
 					},
 					reportType: "periodic_transaction_report",
 					status: "needs_review",
@@ -86,6 +88,10 @@ describe("summarizeParsedPtrBatch", () => {
 			warningCount: 1,
 			missingMemberCount: 1,
 			missingFilingDateCount: 1,
+			missingTransactionDateCount: 0,
+			missingNotificationDateCount: 1,
+			unparsedValueCount: 0,
+			lowConfidenceTransactionCount: 0,
 			statusCounts: [
 				{ name: "needs_review", count: 1 },
 				{ name: "parsed", count: 1 }
@@ -100,6 +106,17 @@ describe("summarizeParsedPtrBatch", () => {
 				{
 					name: "Extracted document text is empty; source document needs manual review.",
 					count: 1
+				}
+			],
+			reviewDocuments: [
+				{
+					sourceDocumentIndex: 1,
+					status: "needs_review",
+					url: "https://example.test/two.pdf",
+					storagePath: "/tmp/two.pdf",
+					documentId: "two-document",
+					transactionCount: 0,
+					warnings: ["Extracted document text is empty; source document needs manual review."]
 				}
 			]
 		});
