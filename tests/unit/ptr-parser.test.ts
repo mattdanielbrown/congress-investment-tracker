@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { parseHousePtrText, parseSenatePtrText } from "../../src/parsers/ptr-parser.js";
 import type { CollectedSourceDocument } from "../../src/types/pipeline.js";
 
-function createDocument(source: "house" | "senate"): CollectedSourceDocument {
+function createDocument(
+	source: "house" | "senate",
+	rawMetadata: Record<string, unknown> = {}
+): CollectedSourceDocument {
 	return {
 		source,
 		chamber: source,
@@ -14,7 +17,7 @@ function createDocument(source: "house" | "senate"): CollectedSourceDocument {
 		sha256: `${source}-hash`,
 		storagePath: `/tmp/${source}.txt`,
 		retrievedAt: "2026-04-24T00:00:00.000Z",
-		rawMetadata: {}
+		rawMetadata
 	};
 }
 
@@ -56,6 +59,27 @@ describe("parseHousePtrText", () => {
 		});
 
 		expect(result.status).toBe("failed");
+		expect(result.warnings).toContain("No PTR transactions were parsed from document text.");
+	});
+
+	it("falls back to House index metadata when PDF text has no member identity", () => {
+		const result = parseHousePtrText({
+			sourceDocument: createDocument("house", {
+				filerFirstName: "Gus M.",
+				filerLastName: "Bilirakis",
+				stateDistrict: "FL12"
+			}),
+			text: "\f\f"
+		});
+
+		expect(result.status).toBe("failed");
+		expect(result.member).toMatchObject({
+			fullName: "Gus M. Bilirakis",
+			chamber: "house",
+			state: "FL",
+			district: "12"
+		});
+		expect(result.warnings).not.toContain("Unable to parse member identity from document text.");
 		expect(result.warnings).toContain("No PTR transactions were parsed from document text.");
 	});
 

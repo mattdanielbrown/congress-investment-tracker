@@ -39,7 +39,7 @@ function parsePtrText(options: PtrParserOptions): PtrParserResult {
 		.map(normalizeWhitespace)
 		.filter(Boolean);
 	const warnings: string[] = [];
-	const member = parseMember(lines, options.sourceDocument.chamber);
+	const member = parseMember(lines, options.sourceDocument);
 	const filingDate = parseFilingDate(lines);
 	const transactions = parseTransactions(lines, filingDate);
 	const isAmendment = /\bamend(?:ment|ed)?\b/iu.test(options.text);
@@ -72,7 +72,7 @@ function parsePtrText(options: PtrParserOptions): PtrParserResult {
 	};
 }
 
-function parseMember(lines: string[], chamber: "house" | "senate"): ParsedMember | undefined {
+function parseMember(lines: string[], sourceDocument: CollectedSourceDocument): ParsedMember | undefined {
 	let fullName: string | undefined;
 	let state = "NA";
 	let district: string | undefined;
@@ -103,16 +103,59 @@ function parseMember(lines: string[], chamber: "house" | "senate"): ParsedMember
 		}
 	}
 
+	if (!fullName && sourceDocument.source === "house") {
+		const metadataMember = parseHouseIndexMember(sourceDocument);
+
+		if (metadataMember) {
+			return metadataMember;
+		}
+	}
+
 	if (!fullName) {
 		return undefined;
 	}
 
 	return {
 		fullName,
-		chamber,
+		chamber: sourceDocument.chamber,
 		state,
 		...(district ? { district } : {})
 	};
+}
+
+function parseHouseIndexMember(sourceDocument: CollectedSourceDocument): ParsedMember | undefined {
+	const metadata = sourceDocument.rawMetadata;
+	const firstName = getMetadataString(metadata, "filerFirstName");
+	const lastName = getMetadataString(metadata, "filerLastName");
+
+	if (!firstName || !lastName) {
+		return undefined;
+	}
+
+	const suffix = getMetadataString(metadata, "filerSuffix");
+	const stateDistrict = getMetadataString(metadata, "stateDistrict");
+	const stateMatch = stateDistrict?.match(/^([A-Z]{2})([A-Z0-9-]+)?$/u);
+	const state = stateMatch?.[1] ?? "NA";
+	const district = parseDistrictValue(state, stateMatch?.[2]);
+
+	return {
+		fullName: normalizeWhitespace([firstName, lastName, suffix].filter(Boolean).join(" ")),
+		chamber: sourceDocument.chamber,
+		state,
+		...(district ? { district } : {})
+	};
+}
+
+function getMetadataString(metadata: Record<string, unknown>, key: string): string | undefined {
+	const value = metadata[key];
+
+	if (typeof value !== "string") {
+		return undefined;
+	}
+
+	const normalized = normalizeWhitespace(value);
+
+	return normalized || undefined;
 }
 
 function parseFilingDate(lines: string[]): string | undefined {
