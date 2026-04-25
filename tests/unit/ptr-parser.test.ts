@@ -97,6 +97,7 @@ describe("parseHousePtrText", () => {
 
 		expect(result.status).toBe("parsed");
 		expect(result.transactions).toHaveLength(2);
+		expect(result.transactions.map((transaction) => transaction.sourceTransactionIndex)).toEqual([0, 1]);
 		expect(result.warnings).toHaveLength(0);
 	});
 

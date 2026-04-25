@@ -40,6 +40,27 @@ describeIfDatabase("database PTR loading", () => {
 					isAmendment: false,
 					transactions: [
 						{
+							sourceTransactionIndex: 0,
+							reportedOwnerCategory: "member",
+							assetName: "Apple Inc. (AAPL)",
+							normalizedAssetName: "Apple Inc. (AAPL)",
+							transactionType: "purchase",
+							transactionTypeLabel: "P",
+							transactionDate: "2025-06-02",
+							filingDate: "2025-08-12",
+							reportedValue: {
+								label: "$1,001 - $15,000",
+								min: 1001,
+								max: 15000,
+								currency: "USD",
+								certainty: "reported_range"
+							},
+							estimatedValue: 8000.5,
+							estimationMethod: "range_midpoint",
+							confidence: 0.9
+						},
+						{
+							sourceTransactionIndex: 1,
 							reportedOwnerCategory: "member",
 							assetName: "Apple Inc. (AAPL)",
 							normalizedAssetName: "Apple Inc. (AAPL)",
@@ -72,7 +93,7 @@ describeIfDatabase("database PTR loading", () => {
 			const first = await loadParsedPtrBatch(client, batch);
 			const second = await loadParsedPtrBatch(client, batch);
 
-			expect(first.transactions).toBe(1);
+			expect(first.transactions).toBe(2);
 			expect(second.transactions).toBe(0);
 
 			const lineage = await client.query<{ source_document_id: string }>(

@@ -185,7 +185,10 @@ function parseTransactions(
 			continue;
 		}
 
-		transactions.push(parsed);
+		transactions.push({
+			...parsed,
+			sourceTransactionIndex: transactions.length
+		});
 	}
 
 	return transactions;

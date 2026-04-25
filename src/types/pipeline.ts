@@ -38,6 +38,7 @@ export interface ParsedMember {
 }
 
 export interface ParsedPtrTransaction {
+	sourceTransactionIndex?: number;
 	reportedOwnerCategory: OwnerCategory;
 	reportedOwnerLabel?: string;
 	assetName: string;

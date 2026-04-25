@@ -344,18 +344,26 @@ async function ensureTransaction(
 	assetId: number,
 	transaction: ParsedPtrTransaction
 ): Promise<boolean> {
+	const sourceTransactionIndex = transaction.sourceTransactionIndex ?? null;
 	const existing = await client.query<{ id: string }>(
 		`SELECT id
 			FROM transactions
 			WHERE disclosure_report_id = $1
-				AND asset_id = $2
-				AND transaction_type = $3
-				AND COALESCE(transaction_date::text, '') = COALESCE($4, '')
-				AND COALESCE(reported_value_label, '') = COALESCE($5, '')
-				AND COALESCE(reported_owner_category, '') = COALESCE($6, '')
+				AND (
+					source_transaction_index = $2
+					OR (
+						$2 IS NULL
+						AND asset_id = $3
+						AND transaction_type = $4
+						AND COALESCE(transaction_date::text, '') = COALESCE($5, '')
+						AND COALESCE(reported_value_label, '') = COALESCE($6, '')
+						AND COALESCE(reported_owner_category, '') = COALESCE($7, '')
+					)
+				)
 			LIMIT 1`,
 		[
 			disclosureReportId,
+			sourceTransactionIndex,
 			assetId,
 			transaction.transactionType,
 			transaction.transactionDate,
@@ -374,6 +382,7 @@ async function ensureTransaction(
 			member_id,
 			asset_id,
 			reported_owner_category,
+			source_transaction_index,
 			transaction_type,
 			transaction_date,
 			filing_date,
@@ -386,12 +395,13 @@ async function ensureTransaction(
 			confidence,
 			notes
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		[
 			disclosureReportId,
 			memberId,
 			assetId,
 			transaction.reportedOwnerCategory,
+			sourceTransactionIndex,
 			transaction.transactionType,
 			transaction.transactionDate,
 			transaction.filingDate,

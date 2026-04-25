@@ -200,6 +200,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 	member_id BIGINT REFERENCES members(id),
 	asset_id BIGINT REFERENCES assets(id),
 	security_id BIGINT REFERENCES securities(id),
+	source_transaction_index INTEGER,
 	reported_owner_category TEXT,
 	transaction_type TEXT NOT NULL,
 	transaction_date DATE,
@@ -235,6 +236,12 @@ CREATE INDEX IF NOT EXISTS idx_transactions_transaction_type
 
 CREATE INDEX IF NOT EXISTS idx_transactions_report
 	ON transactions (disclosure_report_id);
+
+ALTER TABLE transactions
+	ADD COLUMN IF NOT EXISTS source_transaction_index INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_report_source_index
+	ON transactions (disclosure_report_id, source_transaction_index);
 
 CREATE TABLE IF NOT EXISTS holdings (
 	id BIGSERIAL PRIMARY KEY,
