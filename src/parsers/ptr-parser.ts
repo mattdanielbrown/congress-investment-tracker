@@ -301,6 +301,10 @@ function buildWrappedAmountLabel(firstValueFragment: string, followingLines: str
 			break;
 		}
 
+		if (isHouseTableHeaderFragment(line)) {
+			continue;
+		}
+
 		const moneyMatches = [...line.matchAll(moneyPattern)];
 		const lastMoney = moneyMatches.at(-1)?.[0];
 
@@ -318,6 +322,10 @@ function buildWrappedAssetName(firstAssetFragment: string, followingLines: strin
 	for (const line of followingLines) {
 		if (isTransactionContinuationBoundary(line)) {
 			break;
+		}
+
+		if (isHouseTableHeaderFragment(line)) {
+			continue;
 		}
 
 		const assetContinuation = cleanAssetContinuation(line);
@@ -346,6 +354,14 @@ function cleanAssetContinuation(line: string): string | undefined {
 function isTransactionContinuationBoundary(line: string): boolean {
 	return transactionAnchorPattern.test(line)
 		|| /^(F\s+S|S\s+O|L\s*:|I\s+P|C\s+S|I\s+V|Yes\b|No\b|Digitally Signed\b|\*)/iu.test(line);
+}
+
+function isHouseTableHeaderFragment(line: string): boolean {
+	return /^ID\s+Owner\s+Asset\b/iu.test(line)
+		|| /^Type\s+Date\b/iu.test(line)
+		|| /^Gains\s*>/iu.test(line)
+		|| /^\$200\??$/u.test(line)
+		|| /^Cap\.$/iu.test(line);
 }
 
 function cleanMemberName(value: string): string {
